@@ -9,7 +9,6 @@ use Illuminate\Support\Facades\File;
 use PhpOffice\PhpWord\IOFactory;
 use PhpOffice\PhpWord\PhpWord;
 use PhpOffice\PhpWord\SimpleType\Jc;
-use PhpOffice\PhpWord\Style\Cell;
 
 class MovementDocumentService
 {
@@ -17,7 +16,7 @@ class MovementDocumentService
     {
         $movement->loadMissing(['user', 'client', 'fromLocation', 'toLocation', 'lines.inventoryItem']);
 
-        $phpWord = new PhpWord();
+        $phpWord = new PhpWord;
         $phpWord->setDefaultFontName('Arial');
         $phpWord->setDefaultFontSize(10);
         $phpWord->addTitleStyle(1, ['bold' => true, 'size' => 16], ['alignment' => Jc::CENTER]);
@@ -45,7 +44,7 @@ class MovementDocumentService
         $headers = ['Asset ID', 'Type', 'Serial / IMEI', 'Phone #', 'Carrier', 'SIM ICCID', 'Status'];
         $table->addRow();
         foreach ($headers as $header) {
-            $table->addCell(1450, ['bgColor' => 'D9EAF7', 'valign' => Cell::VALIGN_CENTER])->addText($header, 'label');
+            $table->addCell(1450, ['bgColor' => 'D9EAF7', 'valign' => 'center'])->addText($header, 'label');
         }
 
         foreach ($movement->lines as $line) {

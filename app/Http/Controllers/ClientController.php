@@ -22,7 +22,7 @@ class ClientController extends Controller
     {
         $this->authorize('create', Client::class);
 
-        return view('clients.form', ['client' => new Client()]);
+        return view('clients.form', ['client' => new Client]);
     }
 
     public function store(ClientRequest $request): RedirectResponse

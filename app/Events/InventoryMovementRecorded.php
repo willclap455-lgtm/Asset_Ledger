@@ -10,7 +10,5 @@ class InventoryMovementRecorded
 {
     use Dispatchable, SerializesModels;
 
-    public function __construct(public InventoryMovement $movement)
-    {
-    }
+    public function __construct(public InventoryMovement $movement) {}
 }

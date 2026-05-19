@@ -16,8 +16,7 @@ class GenerateMovementDocumentJob implements ShouldQueue
         public InventoryMovement $movement,
         public User $user,
         public string $templateKey = 'standard_movement'
-    ) {
-    }
+    ) {}
 
     public function handle(MovementDocumentService $documents): void
     {

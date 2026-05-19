@@ -13,12 +13,19 @@ class InventoryMovement extends Model
     use HasFactory, HasUuid;
 
     public const TYPE_RECEIVING = 'receiving';
+
     public const TYPE_DEPLOYMENT = 'deployment';
+
     public const TYPE_TRANSFER = 'transfer';
+
     public const TYPE_RETURN = 'return';
+
     public const TYPE_REPAIR_INTAKE = 'repair_intake';
+
     public const TYPE_REPAIR_RETURN = 'repair_return';
+
     public const TYPE_SWAP = 'swap';
+
     public const TYPE_RETIREMENT = 'retirement';
 
     protected $fillable = [

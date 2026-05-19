@@ -17,17 +17,27 @@ class InventoryItem extends Model
     use HasFactory, HasUuid, LogsActivity;
 
     public const TYPE_PHONE = 'phone';
+
     public const TYPE_PRINTER = 'printer';
+
     public const TYPE_MODEM = 'modem';
+
     public const TYPE_SIM_CARD = 'sim_card';
+
     public const TYPE_GENERIC = 'generic';
 
     public const STATUS_RECEIVED = 'received';
+
     public const STATUS_IN_STOCK = 'in_stock';
+
     public const STATUS_DEPLOYED = 'deployed';
+
     public const STATUS_IN_REPAIR = 'in_repair';
+
     public const STATUS_RETURNED = 'returned';
+
     public const STATUS_RETIRED = 'retired';
+
     public const STATUS_LOST = 'lost';
 
     protected $fillable = [

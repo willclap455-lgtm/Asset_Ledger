@@ -41,7 +41,7 @@ class InventoryItemController extends Controller
     {
         $this->authorize('create', InventoryItem::class);
 
-        return view('inventory.form', $this->formData(new InventoryItem()));
+        return view('inventory.form', $this->formData(new InventoryItem));
     }
 
     public function store(InventoryItemRequest $request, InventoryItemService $items): RedirectResponse
