@@ -1,0 +1,5 @@
+@extends('layouts.app')
+@section('content')
+<div class="d-flex justify-content-between align-items-center mb-3"><div><div class="page-title">Locations</div><div class="text-muted">Internal stock areas and external client sites.</div></div><a class="btn btn-primary btn-sm" href="{{ route('locations.create') }}">Add Location</a></div>
+<div class="card"><div class="table-responsive"><table class="table table-sm table-hover mb-0"><thead><tr><th>Name</th><th>Type</th><th>Client</th><th>Code</th><th>Address</th><th>Assets</th><th>Active</th><th></th></tr></thead><tbody>@foreach($locations as $location)<tr><td>{{ $location->name }}</td><td>{{ $location->type }}</td><td>{{ $location->client?->name ?? 'Internal' }}</td><td class="text-mono">{{ $location->code }}</td><td>{{ $location->city }} {{ $location->state }}</td><td>{{ $location->inventory_items_count }}</td><td>{{ $location->is_active ? 'Yes' : 'No' }}</td><td><a class="btn btn-outline-secondary btn-sm" href="{{ route('locations.edit', $location) }}">Edit</a></td></tr>@endforeach</tbody></table></div><div class="card-footer py-2">{{ $locations->links() }}</div></div>
+@endsection
