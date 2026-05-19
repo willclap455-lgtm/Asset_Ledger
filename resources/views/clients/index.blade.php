@@ -1,0 +1,5 @@
+@extends('layouts.app')
+@section('content')
+<div class="d-flex justify-content-between align-items-center mb-3"><div><div class="page-title">Clients</div><div class="text-muted">External parking clients and their operating sites.</div></div><a class="btn btn-primary btn-sm" href="{{ route('clients.create') }}">Add Client</a></div>
+<div class="card"><div class="table-responsive"><table class="table table-sm table-hover mb-0"><thead><tr><th>Name</th><th>Code</th><th>Status</th><th>Locations</th><th>Assets</th><th>Contact</th></tr></thead><tbody>@foreach($clients as $client)<tr><td><a href="{{ route('clients.show', $client) }}">{{ $client->name }}</a></td><td class="text-mono">{{ $client->code }}</td><td>{{ $client->status }}</td><td>{{ $client->locations_count }}</td><td>{{ $client->inventory_items_count }}</td><td>{{ $client->primary_contact_name }} {{ $client->primary_contact_email }}</td></tr>@endforeach</tbody></table></div><div class="card-footer py-2">{{ $clients->links() }}</div></div>
+@endsection
