@@ -44,7 +44,7 @@ DB_HOST=127.0.0.1
 DB_PORT=5432
 DB_DATABASE=clancy_asset_ledger
 DB_USERNAME=clancy_assets
-DB_PASSWORD=change-this-password
+DB_PASSWORD=12pg34
 
 CACHE_STORE=database
 SESSION_DRIVER=database

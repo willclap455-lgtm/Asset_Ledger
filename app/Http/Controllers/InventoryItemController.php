@@ -17,7 +17,7 @@ class InventoryItemController extends Controller
 {
     public function index(Request $request): View
     {
-        $this->authorize('viewAny', InventoryItem::class);
+//        $this->authorize('viewAny', InventoryItem::class);
 
         $items = InventoryItem::query()
             ->with(['client', 'location', 'phone.assignedSimCard', 'printer', 'modem.assignedSimCard', 'simCard'])
