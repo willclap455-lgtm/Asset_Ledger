@@ -13,6 +13,7 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\File;
 use Spatie\Permission\Models\Role;
 use Tests\TestCase;
+use ZipArchive;
 
 class MovementDocumentGenerationTest extends TestCase
 {
@@ -51,5 +52,19 @@ class MovementDocumentGenerationTest extends TestCase
         $path = storage_path('app/'.$document->file_path);
         $this->assertFileExists($path);
         $this->assertGreaterThan(0, File::size($path));
+        $this->assertStringContainsString('inventory_movement_log_examples', $document->metadata['template_source']);
+
+        $zip = new ZipArchive;
+        $this->assertTrue($zip->open($path));
+        $xml = $zip->getFromName('word/document.xml');
+        $zip->close();
+
+        $this->assertStringContainsString('INVENTORY MOVEMENT LOG', $xml);
+        $this->assertStringContainsString('UNIT ID', $xml);
+        $this->assertStringContainsString('PHONE', $xml);
+        $this->assertStringContainsString('DESCRIPTION', $xml);
+        $this->assertStringContainsString('SIM-001', $xml);
+        $this->assertStringContainsString('555-0199', $xml);
+        $this->assertStringContainsString('HOME', $xml);
     }
 }

@@ -120,7 +120,9 @@ class InventoryMovementService
         return [
             'asset_tag' => $item->asset_tag,
             'item_type' => $item->item_type,
+            'category' => $item->category,
             'name' => $item->name,
+            'description' => $item->description,
             'manufacturer' => $item->manufacturer,
             'model' => $item->model,
             'serial_number' => $item->serial_number,

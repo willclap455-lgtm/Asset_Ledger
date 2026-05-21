@@ -14,60 +14,38 @@ class MovementDocumentService
 {
     public function generate(InventoryMovement $movement, User $user, string $templateKey = 'standard_movement'): GeneratedDocument
     {
-        $movement->loadMissing(['user', 'client', 'fromLocation', 'toLocation', 'lines.inventoryItem']);
+        $movement->loadMissing(['user', 'client', 'fromLocation', 'toLocation', 'lines.inventoryItem', 'lines.previousLocation.client', 'lines.newLocation.client']);
 
         $phpWord = new PhpWord;
         $phpWord->setDefaultFontName('Arial');
         $phpWord->setDefaultFontSize(10);
-        $phpWord->addTitleStyle(1, ['bold' => true, 'size' => 16], ['alignment' => Jc::CENTER]);
-        $phpWord->addFontStyle('label', ['bold' => true, 'size' => 9]);
-        $phpWord->addFontStyle('small', ['size' => 8]);
+        $phpWord->addFontStyle('header', ['bold' => true, 'size' => 10]);
 
         $section = $phpWord->addSection(['marginTop' => 720, 'marginBottom' => 720, 'marginLeft' => 720, 'marginRight' => 720]);
-        $section->addTitle('Inventory Movement Form', 1);
-        $section->addText(InventoryMovement::typeOptions()[$movement->movement_type] ?? str($movement->movement_type)->headline(), ['bold' => true, 'size' => 12], ['alignment' => Jc::CENTER]);
+        $section->addText('INVENTORY MOVEMENT LOG', ['bold' => true, 'size' => 11], ['alignment' => Jc::CENTER]);
         $section->addTextBreak();
+        $section->addText('DATE: '.now()->format('n/j/Y'));
 
-        $summary = $section->addTable(['borderSize' => 6, 'borderColor' => '333333', 'cellMargin' => 80]);
-        $this->summaryRow($summary, 'Movement #', $movement->movement_number, 'Date', $movement->occurred_at->format('m/d/Y g:i A'));
-        $this->summaryRow($summary, 'Prepared By', $movement->user->name, 'Client', $movement->client?->name ?? 'Internal / Unassigned');
-        $this->summaryRow($summary, 'From', $movement->fromLocation?->label() ?? 'N/A', 'To', $movement->toLocation?->label() ?? 'N/A');
-        if ($movement->notes) {
-            $summary->addRow();
-            $summary->addCell(1800, ['bgColor' => 'E7E6E6'])->addText('Notes', 'label');
-            $summary->addCell(8200, ['gridSpan' => 3])->addText($movement->notes);
-        }
-
-        $section->addTextBreak();
-        $section->addText('Equipment Detail', ['bold' => true, 'size' => 12]);
-        $table = $section->addTable(['borderSize' => 6, 'borderColor' => '777777', 'cellMargin' => 70]);
-        $headers = ['Asset ID', 'Type', 'Serial / IMEI', 'Phone #', 'Carrier', 'SIM ICCID', 'Status'];
+        $table = $section->addTable(['borderSize' => 6, 'borderColor' => '000000', 'cellMargin' => 70]);
+        $headers = ['UNIT ID', 'PHONE', 'DESCRIPTION', 'FROM', 'TO'];
+        $widths = [1200, 1500, 4300, 1400, 1400];
         $table->addRow();
-        foreach ($headers as $header) {
-            $table->addCell(1450, ['bgColor' => 'D9EAF7', 'valign' => 'center'])->addText($header, 'label');
+        foreach ($headers as $index => $header) {
+            $table->addCell($widths[$index], ['valign' => 'center'])->addText($header, 'header');
         }
 
         foreach ($movement->lines as $line) {
             $snapshot = $line->item_snapshot;
-            $phone = $snapshot['phone'] ?? null;
-            $modem = $snapshot['modem'] ?? null;
-            $sim = $snapshot['sim_card'] ?? ($phone['assigned_sim'] ?? ($modem['assigned_sim'] ?? null));
-            $serial = $snapshot['serial_number'] ?? ($phone['imei'] ?? ($modem['imei'] ?? ''));
             $table->addRow();
-            $table->addCell(1450)->addText($snapshot['asset_tag'] ?? '');
-            $table->addCell(1450)->addText(str($snapshot['item_type'] ?? '')->headline()->toString());
-            $table->addCell(1450)->addText($serial ?: '');
-            $table->addCell(1450)->addText($phone['phone_number'] ?? ($sim['phone_number'] ?? ''));
-            $table->addCell(1450)->addText($phone['carrier'] ?? ($modem['carrier'] ?? ($sim['carrier'] ?? '')));
-            $table->addCell(1450)->addText($sim['iccid'] ?? '');
-            $table->addCell(1450)->addText($line->new_status ?: $line->previous_status ?: '');
+            $table->addCell($widths[0], ['valign' => 'top'])->addText($snapshot['asset_tag'] ?? '');
+            $table->addCell($widths[1], ['valign' => 'top'])->addText($this->phoneColumn($snapshot));
+            $table->addCell($widths[2], ['valign' => 'top'])->addText($this->descriptionColumn($snapshot, $movement));
+            $table->addCell($widths[3], ['valign' => 'top'])->addText($this->locationCode($line->previousLocation) ?: $this->locationCode($movement->fromLocation));
+            $table->addCell($widths[4], ['valign' => 'top'])->addText($this->locationCode($line->newLocation) ?: $this->locationCode($movement->toLocation));
         }
 
         $section->addTextBreak();
-        $section->addText('Operational Sign-Off', ['bold' => true, 'size' => 12]);
-        $sign = $section->addTable(['borderSize' => 6, 'borderColor' => '333333', 'cellMargin' => 120]);
-        $this->signatureRow($sign, 'Released By');
-        $this->signatureRow($sign, 'Received By');
+        $section->addText($movement->occurred_at->format('n/j/Y').' '."\u{2013}".$this->initials($movement->user?->name ?? $user->name));
 
         $directory = storage_path('app/generated-documents');
         File::ensureDirectoryExists($directory);
@@ -85,8 +63,13 @@ class MovementDocumentService
             'checksum' => hash_file('sha256', $absolutePath),
             'generated_at' => now(),
             'metadata' => [
-                'template_source' => 'standard_generated_layout',
-                'note' => 'Replace or extend this profile after production DOCX templates are supplied.',
+                'template_source' => 'inventory_movement_log_examples',
+                'matched_examples' => [
+                    'BANTANJ_20260501.doc',
+                    'MetAnschutz_20260520.doc',
+                    'UnifiedLA_20260505.doc',
+                    'WVState_20260511.doc',
+                ],
             ],
         ]);
 
@@ -100,20 +83,52 @@ class MovementDocumentService
         return $document;
     }
 
-    private function summaryRow($table, string $leftLabel, string $leftValue, string $rightLabel, string $rightValue): void
+    private function phoneColumn(array $snapshot): string
     {
-        $table->addRow();
-        $table->addCell(1800, ['bgColor' => 'E7E6E6'])->addText($leftLabel, 'label');
-        $table->addCell(3200)->addText($leftValue);
-        $table->addCell(1800, ['bgColor' => 'E7E6E6'])->addText($rightLabel, 'label');
-        $table->addCell(3200)->addText($rightValue);
+        $phone = $snapshot['phone'] ?? null;
+        $sim = $snapshot['sim_card'] ?? ($phone['assigned_sim'] ?? null);
+
+        return $phone['phone_number'] ?? ($sim['associated_phone_number'] ?? ($sim['phone_number'] ?? ''));
     }
 
-    private function signatureRow($table, string $label): void
+    private function descriptionColumn(array $snapshot, InventoryMovement $movement): string
     {
-        $table->addRow(600);
-        $table->addCell(2000, ['bgColor' => 'E7E6E6'])->addText($label, 'label');
-        $table->addCell(3500)->addText('Signature: ______________________________');
-        $table->addCell(2500)->addText('Date: ______________');
+        if (! blank($snapshot['description'] ?? null)) {
+            return $snapshot['description'];
+        }
+
+        $base = trim(collect([$snapshot['manufacturer'] ?? null, $snapshot['model'] ?? null])->filter()->implode(' '));
+
+        if (! blank($base)) {
+            return $base;
+        }
+
+        return match ($snapshot['item_type'] ?? null) {
+            'printer' => 'PRINTER',
+            'phone' => 'PHONE',
+            'modem' => 'MODEM',
+            'sim_card' => 'SIM CARD',
+            default => $movement->notes ?: str($snapshot['item_type'] ?? 'Equipment')->headline()->toString(),
+        };
+    }
+
+    private function locationCode($location): string
+    {
+        if (! $location) {
+            return '';
+        }
+
+        return $location->code ?: ($location->client?->code ?: $location->name);
+    }
+
+    private function initials(string $name): string
+    {
+        $words = preg_split('/\s+/', trim($name)) ?: [];
+        $initials = collect($words)
+            ->filter()
+            ->map(fn (string $word): string => str($word)->substr(0, 1)->upper()->toString())
+            ->implode('');
+
+        return $initials ?: 'STAFF';
     }
 }

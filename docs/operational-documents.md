@@ -1,10 +1,27 @@
 # Operational Word Document Handling
 
-The repository did not contain DOC/DOCX operational examples at implementation time. The platform therefore includes a production-ready fallback DOCX generator and a clear path for importing the company's real Word forms later.
+The repository includes four legacy Word `.doc` examples in the root folder:
+
+- `BANTANJ_20260501.doc`
+- `MetAnschutz_20260520.doc`
+- `UnifiedLA_20260505.doc`
+- `WVState_20260511.doc`
+
+These examples are compact one-page movement logs. They share the same operational structure:
+
+1. Centered title: `INVENTORY MOVEMENT LOG`
+2. Printed/generated date line: `DATE: n/j/YYYY`
+3. Bordered five-column table:
+   - `UNIT ID`
+   - `PHONE`
+   - `DESCRIPTION`
+   - `FROM`
+   - `TO`
+4. Movement date and staff initials/signature line, such as `5/5/2026 -MRF`.
 
 ## Current implementation
 
-`MovementDocumentService` uses PHPWord to generate a Microsoft Word movement form for:
+`MovementDocumentService` uses PHPWord to generate a Microsoft Word movement log matching the example format for:
 
 - Incoming inventory
 - Outgoing deployments
@@ -14,11 +31,19 @@ The repository did not contain DOC/DOCX operational examples at implementation t
 - Equipment swaps
 - Retirements
 
-The generated document includes movement number, date, user, client, origin/destination, notes, equipment identifiers, phone numbers, carriers, SIM ICCIDs, statuses, and sign-off rows.
+The generated document intentionally mirrors the current staff-facing paperwork instead of exposing every ledger field. It prints the operational unit ID, phone number when applicable, item description, origin, destination, generated date, and movement date/staff initials.
+
+Richer traceability remains permanently available in the application through:
+
+- `inventory_movements`
+- `inventory_movement_lines`
+- movement line JSON snapshots
+- Spatie Activitylog entries
+- generated document archive records
 
 ## Importing real templates later
 
-When the actual Word documents are added to the repository:
+If the business later wants pixel-level template reuse instead of generated PHPWord layout:
 
 1. Store canonical templates under `resources/document-templates/`.
 2. Add a profile in `config/document_templates.php` for each workflow.
