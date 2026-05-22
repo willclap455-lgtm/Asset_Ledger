@@ -8,12 +8,15 @@ use App\Models\InventoryItem;
 use App\Models\InventoryMovement;
 use App\Models\Location;
 use App\Services\InventoryMovementService;
+use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
 
 class InventoryMovementController extends Controller
 {
+    use AuthorizesRequests;
+
     public function index(Request $request): View
     {
         $this->authorize('viewAny', InventoryMovement::class);
