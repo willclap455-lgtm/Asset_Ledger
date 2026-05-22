@@ -9,12 +9,15 @@ use App\Models\Location;
 use App\Models\Printer;
 use App\Models\SimCard;
 use App\Services\InventoryItemService;
+use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
 
 class InventoryItemController extends Controller
 {
+    use AuthorizesRequests;
+
     public function index(Request $request): View
     {
         $this->authorize('viewAny', InventoryItem::class);

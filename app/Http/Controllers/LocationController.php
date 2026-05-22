@@ -5,11 +5,14 @@ namespace App\Http\Controllers;
 use App\Http\Requests\LocationRequest;
 use App\Models\Client;
 use App\Models\Location;
+use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\View\View;
 
 class LocationController extends Controller
 {
+    use AuthorizesRequests;
+
     public function index(): View
     {
         $this->authorize('viewAny', Location::class);

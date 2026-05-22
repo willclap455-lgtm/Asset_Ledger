@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\InventoryItem;
 use App\Models\InventoryMovement;
 use App\Models\Repair;
+use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\View\View;
@@ -12,6 +13,8 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class ReportController extends Controller
 {
+    use AuthorizesRequests;
+
     public function index(): View
     {
         $this->authorize('viewAny', InventoryItem::class);

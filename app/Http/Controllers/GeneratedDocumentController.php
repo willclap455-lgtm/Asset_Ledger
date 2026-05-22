@@ -5,11 +5,14 @@ namespace App\Http\Controllers;
 use App\Models\GeneratedDocument;
 use App\Models\InventoryMovement;
 use App\Services\MovementDocumentService;
+use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Http\RedirectResponse;
 use Symfony\Component\HttpFoundation\BinaryFileResponse;
 
 class GeneratedDocumentController extends Controller
 {
+    use AuthorizesRequests;
+
     public function store(InventoryMovement $movement, MovementDocumentService $documents): RedirectResponse
     {
         $this->authorize('view', $movement);

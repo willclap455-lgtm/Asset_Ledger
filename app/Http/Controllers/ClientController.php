@@ -4,11 +4,14 @@ namespace App\Http\Controllers;
 
 use App\Http\Requests\ClientRequest;
 use App\Models\Client;
+use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\View\View;
 
 class ClientController extends Controller
 {
+    use AuthorizesRequests;
+
     public function index(): View
     {
         $this->authorize('viewAny', Client::class);
