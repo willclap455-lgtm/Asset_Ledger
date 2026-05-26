@@ -7,6 +7,7 @@ use App\Models\InventoryItem;
 use App\Models\InventoryMovement;
 use App\Models\InventoryMovementLine;
 use App\Models\User;
+use Illuminate\Database\QueryException;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 
@@ -14,67 +15,79 @@ class InventoryMovementService
 {
     public function recordMovement(array $data, User $user): InventoryMovement
     {
-        return DB::transaction(function () use ($data, $user): InventoryMovement {
-            $movement = InventoryMovement::create([
-                'movement_number' => $this->nextMovementNumber(),
-                'movement_type' => $data['movement_type'],
-                'occurred_at' => Carbon::parse($data['occurred_at'] ?? now()),
-                'user_id' => $user->id,
-                'from_location_id' => $data['from_location_id'] ?? null,
-                'to_location_id' => $data['to_location_id'] ?? null,
-                'client_id' => $data['client_id'] ?? null,
-                'notes' => $data['notes'] ?? null,
-                'metadata' => $data['metadata'] ?? null,
-            ]);
+        $attempts = 5;
 
-            foreach (array_values($data['item_ids']) as $index => $itemId) {
-                $item = InventoryItem::query()
-                    ->with(['client', 'location', 'phone.assignedSimCard.inventoryItem', 'phone.assignedPrinter.inventoryItem', 'printer', 'modem.assignedSimCard.inventoryItem', 'simCard'])
-                    ->lockForUpdate()
-                    ->findOrFail($itemId);
+        for ($attempt = 1; $attempt <= $attempts; $attempt++) {
+            try {
+                return DB::transaction(function () use ($data, $user): InventoryMovement {
+                    $movement = InventoryMovement::create([
+                        'movement_number' => $this->nextMovementNumber(),
+                        'movement_type' => $data['movement_type'],
+                        'occurred_at' => Carbon::parse($data['occurred_at'] ?? now()),
+                        'user_id' => $user->id,
+                        'from_location_id' => $data['from_location_id'] ?? null,
+                        'to_location_id' => $data['to_location_id'] ?? null,
+                        'client_id' => $data['client_id'] ?? null,
+                        'notes' => $data['notes'] ?? null,
+                        'metadata' => $data['metadata'] ?? null,
+                    ]);
 
-                $previousLocationId = $item->location_id;
-                $previousClientId = $item->client_id;
-                $previousStatus = $item->status;
-                $newLocationId = $this->targetLocation($data, $item);
-                $newClientId = $this->targetClient($data, $item);
-                $newStatus = $data['new_status'] ?? $this->statusForMovement($data['movement_type'], $item->status);
+                    foreach (array_values($data['item_ids']) as $index => $itemId) {
+                        $item = InventoryItem::query()
+                            ->with(['client', 'location', 'phone.assignedSimCard.inventoryItem', 'phone.assignedPrinter.inventoryItem', 'printer', 'modem.assignedSimCard.inventoryItem', 'simCard'])
+                            ->lockForUpdate()
+                            ->findOrFail($itemId);
 
-                InventoryMovementLine::create([
-                    'inventory_movement_id' => $movement->id,
-                    'inventory_item_id' => $item->id,
-                    'previous_location_id' => $previousLocationId,
-                    'new_location_id' => $newLocationId,
-                    'previous_client_id' => $previousClientId,
-                    'new_client_id' => $newClientId,
-                    'previous_status' => $previousStatus,
-                    'new_status' => $newStatus,
-                    'item_snapshot' => $this->snapshot($item),
-                    'sequence' => $index + 1,
-                ]);
+                        $previousLocationId = $item->location_id;
+                        $previousClientId = $item->client_id;
+                        $previousStatus = $item->status;
+                        $newLocationId = $this->targetLocation($data, $item);
+                        $newClientId = $this->targetClient($data, $item);
+                        $newStatus = $data['new_status'] ?? $this->statusForMovement($data['movement_type'], $item->status);
 
-                $updates = [
-                    'location_id' => $newLocationId,
-                    'client_id' => $newClientId,
-                    'status' => $newStatus,
-                ];
+                        InventoryMovementLine::create([
+                            'inventory_movement_id' => $movement->id,
+                            'inventory_item_id' => $item->id,
+                            'previous_location_id' => $previousLocationId,
+                            'new_location_id' => $newLocationId,
+                            'previous_client_id' => $previousClientId,
+                            'new_client_id' => $newClientId,
+                            'previous_status' => $previousStatus,
+                            'new_status' => $newStatus,
+                            'item_snapshot' => $this->snapshot($item),
+                            'sequence' => $index + 1,
+                        ]);
 
-                if ($data['movement_type'] === InventoryMovement::TYPE_DEPLOYMENT && ! $item->deployed_at) {
-                    $updates['deployed_at'] = Carbon::parse($data['occurred_at'] ?? now())->toDateString();
+                        $updates = [
+                            'location_id' => $newLocationId,
+                            'client_id' => $newClientId,
+                            'status' => $newStatus,
+                        ];
+
+                        if ($data['movement_type'] === InventoryMovement::TYPE_DEPLOYMENT && ! $item->deployed_at) {
+                            $updates['deployed_at'] = Carbon::parse($data['occurred_at'] ?? now())->toDateString();
+                        }
+
+                        if ($data['movement_type'] === InventoryMovement::TYPE_RETIREMENT) {
+                            $updates['retired_at'] = Carbon::parse($data['occurred_at'] ?? now())->toDateString();
+                        }
+
+                        $item->update($updates);
+                    }
+
+                    $movement->load(['user', 'client', 'fromLocation', 'toLocation', 'lines.inventoryItem.phone.assignedSimCard.inventoryItem', 'lines.inventoryItem.phone.assignedPrinter.inventoryItem', 'lines.inventoryItem.printer', 'lines.inventoryItem.modem.assignedSimCard.inventoryItem', 'lines.inventoryItem.simCard']);
+                    event(new InventoryMovementRecorded($movement));
+
+                    return $movement;
+                });
+            } catch (QueryException $exception) {
+                if (! $this->isDuplicateMovementNumberException($exception) || $attempt === $attempts) {
+                    throw $exception;
                 }
-
-                if ($data['movement_type'] === InventoryMovement::TYPE_RETIREMENT) {
-                    $updates['retired_at'] = Carbon::parse($data['occurred_at'] ?? now())->toDateString();
-                }
-
-                $item->update($updates);
             }
+        }
 
-            $movement->load(['user', 'client', 'fromLocation', 'toLocation', 'lines.inventoryItem.phone.assignedSimCard.inventoryItem', 'lines.inventoryItem.phone.assignedPrinter.inventoryItem', 'lines.inventoryItem.printer', 'lines.inventoryItem.modem.assignedSimCard.inventoryItem', 'lines.inventoryItem.simCard']);
-            event(new InventoryMovementRecorded($movement));
-
-            return $movement;
-        });
+        throw new \RuntimeException('Unable to record inventory movement.');
     }
 
     private function nextMovementNumber(): string
@@ -86,7 +99,15 @@ class InventoryMovementService
             ->value('movement_number');
         $count = $lastMovementNumber ? ((int) str($lastMovementNumber)->afterLast('-')->toString()) + 1 : 1;
 
-        return $prefix.str_pad((string) $count, 4, '0', STR_PAD_LEFT);
+        return $prefix.str_pad((string) $nextSequence, 4, '0', STR_PAD_LEFT);
+    }
+
+    private function isDuplicateMovementNumberException(QueryException $exception): bool
+    {
+        $sqlState = (string) ($exception->errorInfo[0] ?? $exception->getCode());
+
+        return in_array($sqlState, ['23000', '23505'], true)
+            && str_contains($exception->getMessage(), 'movement_number');
     }
 
     private function targetLocation(array $data, InventoryItem $item): ?string
