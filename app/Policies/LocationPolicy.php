@@ -29,6 +29,6 @@ class LocationPolicy
 
     public function delete(User $user, Location $location): bool
     {
-        return false;
+        return $this->create($user);
     }
 }

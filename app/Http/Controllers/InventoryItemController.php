@@ -9,6 +9,7 @@ use App\Models\Location;
 use App\Models\Printer;
 use App\Models\SimCard;
 use App\Services\InventoryItemService;
+use Illuminate\Database\QueryException;
 use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -60,7 +61,7 @@ class InventoryItemController extends Controller
         $inventoryItem->load([
             'client', 'location', 'phone.assignedSimCard.inventoryItem', 'phone.assignedPrinter.inventoryItem',
             'printer', 'modem.assignedSimCard.inventoryItem', 'simCard.assignedInventoryItem',
-            'notes.user', 'repairs.technician', 'movementLines.movement.user', 'movementLines.previousLocation', 'movementLines.newLocation',
+            'inventoryNotes.user', 'repairs.technician', 'movementLines.movement.user', 'movementLines.previousLocation', 'movementLines.newLocation',
         ]);
 
         return view('inventory.show', ['item' => $inventoryItem]);
@@ -78,6 +79,26 @@ class InventoryItemController extends Controller
         $item = $items->update($inventoryItem, $request->validated());
 
         return redirect()->route('inventory-items.show', $item)->with('status', 'Inventory item updated.');
+    }
+
+    public function destroy(InventoryItem $inventoryItem): RedirectResponse
+    {
+        $this->authorize('delete', $inventoryItem);
+
+        $inventoryItem->loadCount(['movementLines', 'repairs']);
+
+        if ($inventoryItem->movement_lines_count > 0 || $inventoryItem->repairs_count > 0) {
+            return back()->withErrors('Inventory items with movement or repair history cannot be deleted. Retire the item instead to preserve the audit trail.');
+        }
+
+        try {
+            $assetTag = $inventoryItem->asset_tag;
+            $inventoryItem->delete();
+        } catch (QueryException) {
+            return back()->withErrors('This inventory item is linked to operational records and cannot be deleted.');
+        }
+
+        return redirect()->route('inventory-items.index')->with('status', "Inventory item {$assetTag} deleted.");
     }
 
     private function formData(InventoryItem $item): array

@@ -91,7 +91,7 @@ class InventoryItem extends Model
         return $this->hasMany(InventoryMovementLine::class);
     }
 
-    public function notes(): HasMany
+    public function inventoryNotes(): HasMany
     {
         return $this->hasMany(InventoryNote::class)->latest();
     }

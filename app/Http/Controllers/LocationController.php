@@ -49,4 +49,14 @@ class LocationController extends Controller
 
         return redirect()->route('locations.index')->with('status', 'Location updated.');
     }
+
+    public function destroy(Location $location): RedirectResponse
+    {
+        $this->authorize('delete', $location);
+
+        $name = $location->name;
+        $location->delete();
+
+        return redirect()->route('locations.index')->with('status', "Location {$name} deleted.");
+    }
 }

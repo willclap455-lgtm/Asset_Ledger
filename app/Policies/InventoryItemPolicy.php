@@ -34,6 +34,6 @@ class InventoryItemPolicy
 
     public function delete(User $user, InventoryItem $item): bool
     {
-        return false;
+        return $user->hasAnyRole(['Administrator', 'Inventory Staff']);
     }
 }
