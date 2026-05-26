@@ -17,9 +17,9 @@ Route::redirect('/', '/dashboard');
 Route::middleware(['auth', 'verified'])->group(function (): void {
     Route::get('/dashboard', DashboardController::class)->name('dashboard');
 
-    Route::resource('clients', ClientController::class)->except(['destroy']);
-    Route::resource('locations', LocationController::class)->except(['show', 'destroy']);
-    Route::resource('inventory-items', InventoryItemController::class)->except(['destroy']);
+    Route::resource('clients', ClientController::class);
+    Route::resource('locations', LocationController::class)->except(['show']);
+    Route::resource('inventory-items', InventoryItemController::class);
     Route::resource('movements', InventoryMovementController::class)->only(['index', 'create', 'store', 'show']);
 
     Route::post('inventory-items/{inventory_item}/notes', [InventoryNoteController::class, 'store'])->name('inventory-items.notes.store');

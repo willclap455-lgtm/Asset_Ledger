@@ -56,4 +56,14 @@ class ClientController extends Controller
 
         return redirect()->route('clients.show', $client)->with('status', 'Client updated.');
     }
+
+    public function destroy(Client $client): RedirectResponse
+    {
+        $this->authorize('delete', $client);
+
+        $name = $client->name;
+        $client->delete();
+
+        return redirect()->route('clients.index')->with('status', "Client {$name} deleted.");
+    }
 }

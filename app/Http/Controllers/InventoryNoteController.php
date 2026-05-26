@@ -10,7 +10,7 @@ class InventoryNoteController extends Controller
 {
     public function store(InventoryNoteRequest $request, InventoryItem $inventoryItem): RedirectResponse
     {
-        $inventoryItem->notes()->create($request->validated() + ['user_id' => $request->user()->id]);
+        $inventoryItem->inventoryNotes()->create($request->validated() + ['user_id' => $request->user()->id]);
 
         activity('inventory_notes')
             ->performedOn($inventoryItem)
