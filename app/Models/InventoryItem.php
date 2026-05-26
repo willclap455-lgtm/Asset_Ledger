@@ -139,9 +139,9 @@ class InventoryItem extends Model
                 $query->orWhereHas('phone.assignedSimCard', function (Builder $q) use ($phoneLike): void {
                     $q->whereRaw("replace(lower(associated_phone_number), '-', '') like ?", [$phoneLike]);
                 })
-                ->orWhereHas('modem.assignedSimCard', function (Builder $q) use ($phoneLike): void {
-                    $q->whereRaw("replace(lower(associated_phone_number), '-', '') like ?", [$phoneLike]);
-                });
+                    ->orWhereHas('modem.assignedSimCard', function (Builder $q) use ($phoneLike): void {
+                        $q->whereRaw("replace(lower(associated_phone_number), '-', '') like ?", [$phoneLike]);
+                    });
             }
         });
     }
