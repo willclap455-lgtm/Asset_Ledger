@@ -107,16 +107,42 @@ class InventoryItem extends Model
             return $query;
         }
 
-        $like = '%'.strtolower($term).'%';
+        $normalizedTerm = strtolower($term);
+        $like = '%'.$normalizedTerm.'%';
+        $phoneTerm = str_replace('-', '', $normalizedTerm);
+        $phoneLike = '%'.$phoneTerm.'%';
 
-        return $query->where(function (Builder $query) use ($like): void {
+        return $query->where(function (Builder $query) use ($like, $phoneLike, $phoneTerm): void {
             $query->whereRaw('lower(asset_tag) like ?', [$like])
                 ->orWhereRaw('lower(name) like ?', [$like])
                 ->orWhereRaw('lower(serial_number) like ?', [$like])
                 ->orWhereRaw('lower(manufacturer) like ?', [$like])
                 ->orWhereRaw('lower(model) like ?', [$like])
-                ->orWhereHas('phone', fn (Builder $q) => $q->whereRaw('lower(phone_number) like ?', [$like])->orWhereRaw('lower(imei) like ?', [$like]))
-                ->orWhereHas('simCard', fn (Builder $q) => $q->whereRaw('lower(iccid) like ?', [$like])->orWhereRaw('lower(imsi) like ?', [$like]));
+                ->orWhereHas('phone', function (Builder $q) use ($like, $phoneLike, $phoneTerm): void {
+                    $q->whereRaw('lower(phone_number) like ?', [$like])
+                        ->orWhereRaw('lower(imei) like ?', [$like]);
+
+                    if ($phoneTerm !== '') {
+                        $q->orWhereRaw("replace(lower(phone_number), '-', '') like ?", [$phoneLike]);
+                    }
+                })
+                ->orWhereHas('simCard', function (Builder $q) use ($like, $phoneLike, $phoneTerm): void {
+                    $q->whereRaw('lower(iccid) like ?', [$like])
+                        ->orWhereRaw('lower(imsi) like ?', [$like]);
+
+                    if ($phoneTerm !== '') {
+                        $q->orWhereRaw("replace(lower(associated_phone_number), '-', '') like ?", [$phoneLike]);
+                    }
+                });
+
+            if ($phoneTerm !== '') {
+                $query->orWhereHas('phone.assignedSimCard', function (Builder $q) use ($phoneLike): void {
+                    $q->whereRaw("replace(lower(associated_phone_number), '-', '') like ?", [$phoneLike]);
+                })
+                ->orWhereHas('modem.assignedSimCard', function (Builder $q) use ($phoneLike): void {
+                    $q->whereRaw("replace(lower(associated_phone_number), '-', '') like ?", [$phoneLike]);
+                });
+            }
         });
     }
 

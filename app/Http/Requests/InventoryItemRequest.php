@@ -42,7 +42,12 @@ class InventoryItemRequest extends FormRequest
             'carrier' => ['nullable', 'string', 'max:120'],
             'imei' => [Rule::requiredIf(fn () => in_array($this->input('item_type'), [InventoryItem::TYPE_PHONE, InventoryItem::TYPE_MODEM], true) && blank($this->input('serial_number'))), 'nullable', 'string', 'max:120', Rule::unique($this->input('item_type') === InventoryItem::TYPE_MODEM ? 'modems' : 'phones', 'imei')->ignore($this->input('item_type') === InventoryItem::TYPE_MODEM ? $modem?->id : $phone?->id)],
             'android_version' => ['nullable', 'string', 'max:80'],
-            'assigned_sim_card_id' => ['nullable', 'exists:sim_cards,id'],
+            'assigned_sim_card_id' => [
+                'nullable',
+                'exists:sim_cards,id',
+                Rule::unique('phones', 'assigned_sim_card_id')->ignore($phone?->id),
+                Rule::unique('modems', 'assigned_sim_card_id')->ignore($modem?->id),
+            ],
             'assigned_printer_id' => ['nullable', 'exists:printers,id'],
             'printer_identifier' => ['nullable', 'string', 'max:120', Rule::unique('printers', 'printer_identifier')->ignore($printer?->id)],
             'printer_color' => ['nullable', 'string', 'max:80'],
@@ -52,6 +57,13 @@ class InventoryItemRequest extends FormRequest
             'associated_phone_number' => ['nullable', 'string', 'max:64'],
             'assigned_inventory_item_id' => ['nullable', 'exists:inventory_items,id'],
             'activation_status' => ['nullable', 'string', 'max:80'],
+        ];
+    }
+
+    public function messages(): array
+    {
+        return [
+            'assigned_sim_card_id.unique' => 'This SIM card is already assigned to another device.',
         ];
     }
 }
