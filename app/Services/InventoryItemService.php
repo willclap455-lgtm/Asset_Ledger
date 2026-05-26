@@ -9,6 +9,7 @@ use App\Models\Printer;
 use App\Models\SimCard;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\ValidationException;
 
 class InventoryItemService
 {
@@ -43,6 +44,8 @@ class InventoryItemService
 
     private function syncTypedDetails(InventoryItem $item, array $data): void
     {
+        $this->pruneObsoleteTypedDetails($item);
+
         match ($item->item_type) {
             InventoryItem::TYPE_PHONE => $this->syncPhone($item, $data),
             InventoryItem::TYPE_PRINTER => $this->syncPrinter($item, $data),
@@ -52,16 +55,42 @@ class InventoryItemService
         };
     }
 
+    private function pruneObsoleteTypedDetails(InventoryItem $item): void
+    {
+        if ($item->item_type !== InventoryItem::TYPE_PHONE && $phone = $item->phone()->first()) {
+            $this->clearSimCardAssignment($item, $phone->assigned_sim_card_id);
+            $phone->delete();
+        }
+
+        if ($item->item_type !== InventoryItem::TYPE_MODEM && $modem = $item->modem()->first()) {
+            $this->clearSimCardAssignment($item, $modem->assigned_sim_card_id);
+            $modem->delete();
+        }
+
+        if ($item->item_type !== InventoryItem::TYPE_PRINTER) {
+            $item->printer()->delete();
+        }
+
+        if ($item->item_type !== InventoryItem::TYPE_SIM_CARD) {
+            $item->simCard()->delete();
+        }
+    }
+
     private function syncPhone(InventoryItem $item, array $data): void
     {
+        $existingPhone = $item->phone()->first();
+        $previousSimCardId = $existingPhone?->assigned_sim_card_id;
+        $attributes = Arr::only($data, ['phone_number', 'carrier', 'imei', 'android_version', 'assigned_sim_card_id', 'assigned_printer_id']);
+        $newSimCardId = $attributes['assigned_sim_card_id'] ?? null;
+
+        $this->ensureSimCardIsAvailable($newSimCardId, $item);
+
         $phone = Phone::updateOrCreate(
             ['inventory_item_id' => $item->id],
-            Arr::only($data, ['phone_number', 'carrier', 'imei', 'android_version', 'assigned_sim_card_id', 'assigned_printer_id'])
+            $attributes
         );
 
-        if ($phone->assigned_sim_card_id) {
-            SimCard::whereKey($phone->assigned_sim_card_id)->update(['assigned_inventory_item_id' => $item->id]);
-        }
+        $this->syncSimCardAssignment($item, $previousSimCardId, $phone->assigned_sim_card_id);
     }
 
     private function syncPrinter(InventoryItem $item, array $data): void
@@ -74,14 +103,19 @@ class InventoryItemService
 
     private function syncModem(InventoryItem $item, array $data): void
     {
+        $existingModem = $item->modem()->first();
+        $previousSimCardId = $existingModem?->assigned_sim_card_id;
+        $attributes = Arr::only($data, ['imei', 'carrier', 'assigned_sim_card_id']);
+        $newSimCardId = $attributes['assigned_sim_card_id'] ?? null;
+
+        $this->ensureSimCardIsAvailable($newSimCardId, $item);
+
         $modem = Modem::updateOrCreate(
             ['inventory_item_id' => $item->id],
-            Arr::only($data, ['imei', 'carrier', 'assigned_sim_card_id'])
+            $attributes
         );
 
-        if ($modem->assigned_sim_card_id) {
-            SimCard::whereKey($modem->assigned_sim_card_id)->update(['assigned_inventory_item_id' => $item->id]);
-        }
+        $this->syncSimCardAssignment($item, $previousSimCardId, $modem->assigned_sim_card_id);
     }
 
     private function syncSimCard(InventoryItem $item, array $data): void
@@ -90,5 +124,51 @@ class InventoryItemService
             ['inventory_item_id' => $item->id],
             Arr::only($data, ['iccid', 'imsi', 'carrier', 'associated_phone_number', 'assigned_inventory_item_id', 'activation_status'])
         );
+    }
+
+    private function ensureSimCardIsAvailable(?string $simCardId, InventoryItem $item): void
+    {
+        if (! $simCardId) {
+            return;
+        }
+
+        $assignedToAnotherPhone = Phone::where('assigned_sim_card_id', $simCardId)
+            ->where('inventory_item_id', '!=', $item->id)
+            ->exists();
+        $assignedToAnotherModem = Modem::where('assigned_sim_card_id', $simCardId)
+            ->where('inventory_item_id', '!=', $item->id)
+            ->exists();
+
+        if ($assignedToAnotherPhone || $assignedToAnotherModem) {
+            throw ValidationException::withMessages([
+                'assigned_sim_card_id' => 'This SIM card is already assigned to another device.',
+            ]);
+        }
+    }
+
+    private function syncSimCardAssignment(InventoryItem $item, ?string $previousSimCardId, ?string $newSimCardId): void
+    {
+        SimCard::where('assigned_inventory_item_id', $item->id)
+            ->when($newSimCardId, fn ($query) => $query->whereKeyNot($newSimCardId))
+            ->update(['assigned_inventory_item_id' => null]);
+
+        if ($previousSimCardId && $previousSimCardId !== $newSimCardId) {
+            $this->clearSimCardAssignment($item, $previousSimCardId);
+        }
+
+        if ($newSimCardId) {
+            SimCard::whereKey($newSimCardId)->update(['assigned_inventory_item_id' => $item->id]);
+        }
+    }
+
+    private function clearSimCardAssignment(InventoryItem $item, ?string $simCardId): void
+    {
+        if (! $simCardId) {
+            return;
+        }
+
+        SimCard::whereKey($simCardId)
+            ->where('assigned_inventory_item_id', $item->id)
+            ->update(['assigned_inventory_item_id' => null]);
     }
 }

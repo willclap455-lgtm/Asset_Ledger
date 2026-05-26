@@ -14,9 +14,15 @@
             <div class="col-md-3"><div class="text-muted small">Serial</div><span class="text-mono">{{ $item->serial_number ?: 'N/A' }}</span></div>
         </div></div>
         <div class="card mb-3"><div class="card-header fw-semibold">Device Identifiers and Relationships</div><div class="card-body row g-3 small">
-            @if($item->phone)<div class="col-md-6"><h6>Phone</h6><div>Number: <span class="text-mono">{{ $item->phone->phone_number }}</span></div><div>Carrier: {{ $item->phone->carrier }}</div><div>IMEI: <span class="text-mono">{{ $item->phone->imei }}</span></div><div>Android: {{ $item->phone->android_version }}</div><div>SIM: {{ $item->phone->assignedSimCard?->iccid ?? 'None' }}</div><div>Printer: {{ $item->phone->assignedPrinter?->inventoryItem?->asset_tag ?? 'None' }}</div></div>@endif
+            @if($item->phone)
+                @php($assignedSim = $item->phone->assignedSimCard)
+                <div class="col-md-6"><h6>Phone</h6><div>Number: <span class="text-mono">{{ $item->phone->phone_number }}</span></div><div>Carrier: {{ $item->phone->carrier }}</div><div>IMEI: <span class="text-mono">{{ $item->phone->imei }}</span></div><div>Android: {{ $item->phone->android_version }}</div><div>SIM: <span class="text-mono">{{ $assignedSim?->iccid ?? 'None' }}</span></div>@if($assignedSim)<div>SIM Phone #: <span class="text-mono">{{ $assignedSim->associated_phone_number ?: 'N/A' }}</span></div><div>SIM Carrier: {{ $assignedSim->carrier ?: 'N/A' }}</div>@endif<div>Printer: {{ $item->phone->assignedPrinter?->inventoryItem?->asset_tag ?? 'None' }}</div></div>
+            @endif
             @if($item->printer)<div class="col-md-6"><h6>Printer</h6><div>Printer ID: {{ $item->printer->printer_identifier }}</div><div>Color: {{ $item->printer->printer_color }}</div><div>Firmware: {{ $item->printer->firmware_version }}</div></div>@endif
-            @if($item->modem)<div class="col-md-6"><h6>Modem</h6><div>IMEI: <span class="text-mono">{{ $item->modem->imei }}</span></div><div>Carrier: {{ $item->modem->carrier }}</div><div>SIM: {{ $item->modem->assignedSimCard?->iccid ?? 'None' }}</div></div>@endif
+            @if($item->modem)
+                @php($assignedSim = $item->modem->assignedSimCard)
+                <div class="col-md-6"><h6>Modem</h6><div>IMEI: <span class="text-mono">{{ $item->modem->imei }}</span></div><div>Carrier: {{ $item->modem->carrier }}</div><div>SIM: <span class="text-mono">{{ $assignedSim?->iccid ?? 'None' }}</span></div>@if($assignedSim)<div>SIM Phone #: <span class="text-mono">{{ $assignedSim->associated_phone_number ?: 'N/A' }}</span></div><div>SIM Carrier: {{ $assignedSim->carrier ?: 'N/A' }}</div>@endif</div>
+            @endif
             @if($item->simCard)<div class="col-md-6"><h6>SIM Card</h6><div>ICCID: <span class="text-mono">{{ $item->simCard->iccid }}</span></div><div>IMSI: <span class="text-mono">{{ $item->simCard->imsi }}</span></div><div>Carrier: {{ $item->simCard->carrier }}</div><div>Phone #: {{ $item->simCard->associated_phone_number }}</div><div>Assigned Device: {{ $item->simCard->assignedInventoryItem?->asset_tag ?? 'None' }}</div></div>@endif
             @if(!$item->phone && !$item->printer && !$item->modem && !$item->simCard)<div class="col text-muted">No typed detail record exists for this asset.</div>@endif
         </div></div>

@@ -58,4 +58,34 @@ class InventoryMovementServiceTest extends TestCase
         $this->assertSame(InventoryItem::STATUS_IN_REPAIR, $item->fresh()->status);
         $this->assertSame('555-0100', $movement->lines()->first()->item_snapshot['phone']['phone_number']);
     }
+
+    public function test_movement_numbers_increment_without_aggregate_locks(): void
+    {
+        $user = User::factory()->create();
+        Role::findOrCreate('Administrator');
+        $user->assignRole('Administrator');
+        $firstItem = InventoryItem::create([
+            'asset_tag' => 'MOVE-001',
+            'item_type' => InventoryItem::TYPE_GENERIC,
+            'status' => InventoryItem::STATUS_RECEIVED,
+        ]);
+        $secondItem = InventoryItem::create([
+            'asset_tag' => 'MOVE-002',
+            'item_type' => InventoryItem::TYPE_GENERIC,
+            'status' => InventoryItem::STATUS_RECEIVED,
+        ]);
+        $service = app(InventoryMovementService::class);
+
+        $firstMovement = $service->recordMovement([
+            'movement_type' => InventoryMovement::TYPE_RECEIVING,
+            'item_ids' => [$firstItem->id],
+        ], $user);
+        $secondMovement = $service->recordMovement([
+            'movement_type' => InventoryMovement::TYPE_RECEIVING,
+            'item_ids' => [$secondItem->id],
+        ], $user);
+
+        $this->assertStringEndsWith('-0001', $firstMovement->movement_number);
+        $this->assertStringEndsWith('-0002', $secondMovement->movement_number);
+    }
 }
