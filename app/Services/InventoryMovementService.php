@@ -93,12 +93,11 @@ class InventoryMovementService
     private function nextMovementNumber(): string
     {
         $prefix = 'MOV-'.now()->format('Ymd').'-';
-        $nextSequence = (InventoryMovement::query()
-            ->where('movement_number', 'like', $prefix.'%')
+        $lastMovementNumber = InventoryMovement::where('movement_number', 'like', $prefix.'%')
             ->lockForUpdate()
-            ->pluck('movement_number')
-            ->map(fn (string $movementNumber): int => (int) substr($movementNumber, strlen($prefix)))
-            ->max() ?? 0) + 1;
+            ->orderByDesc('movement_number')
+            ->value('movement_number');
+        $count = $lastMovementNumber ? ((int) str($lastMovementNumber)->afterLast('-')->toString()) + 1 : 1;
 
         return $prefix.str_pad((string) $nextSequence, 4, '0', STR_PAD_LEFT);
     }

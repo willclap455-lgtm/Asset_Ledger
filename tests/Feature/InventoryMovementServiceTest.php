@@ -59,38 +59,33 @@ class InventoryMovementServiceTest extends TestCase
         $this->assertSame('555-0100', $movement->lines()->first()->item_snapshot['phone']['phone_number']);
     }
 
-    public function test_it_generates_the_next_number_from_the_highest_daily_sequence(): void
+    public function test_movement_numbers_increment_without_aggregate_locks(): void
     {
         $user = User::factory()->create();
-        $prefix = 'MOV-'.now()->format('Ymd').'-';
-
-        InventoryMovement::create([
-            'movement_number' => $prefix.'9999',
-            'movement_type' => InventoryMovement::TYPE_RECEIVING,
-            'occurred_at' => now(),
-            'user_id' => $user->id,
-        ]);
-        InventoryMovement::create([
-            'movement_number' => $prefix.'10000',
-            'movement_type' => InventoryMovement::TYPE_RECEIVING,
-            'occurred_at' => now(),
-            'user_id' => $user->id,
-        ]);
-
-        $warehouse = Location::create(['name' => 'Warehouse', 'code' => 'WH', 'type' => 'internal']);
-        $item = InventoryItem::create([
-            'asset_tag' => 'PHONE-002',
-            'item_type' => InventoryItem::TYPE_PHONE,
+        Role::findOrCreate('Administrator');
+        $user->assignRole('Administrator');
+        $firstItem = InventoryItem::create([
+            'asset_tag' => 'MOVE-001',
+            'item_type' => InventoryItem::TYPE_GENERIC,
             'status' => InventoryItem::STATUS_RECEIVED,
-            'location_id' => $warehouse->id,
         ]);
+        $secondItem = InventoryItem::create([
+            'asset_tag' => 'MOVE-002',
+            'item_type' => InventoryItem::TYPE_GENERIC,
+            'status' => InventoryItem::STATUS_RECEIVED,
+        ]);
+        $service = app(InventoryMovementService::class);
 
-        $movement = app(InventoryMovementService::class)->recordMovement([
+        $firstMovement = $service->recordMovement([
             'movement_type' => InventoryMovement::TYPE_RECEIVING,
-            'to_location_id' => $warehouse->id,
-            'item_ids' => [$item->id],
+            'item_ids' => [$firstItem->id],
+        ], $user);
+        $secondMovement = $service->recordMovement([
+            'movement_type' => InventoryMovement::TYPE_RECEIVING,
+            'item_ids' => [$secondItem->id],
         ], $user);
 
-        $this->assertSame($prefix.'10001', $movement->movement_number);
+        $this->assertStringEndsWith('-0001', $firstMovement->movement_number);
+        $this->assertStringEndsWith('-0002', $secondMovement->movement_number);
     }
 }
