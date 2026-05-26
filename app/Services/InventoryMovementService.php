@@ -97,7 +97,7 @@ class InventoryMovementService
             ->lockForUpdate()
             ->orderByDesc('movement_number')
             ->value('movement_number');
-        $count = $lastMovementNumber ? ((int) str($lastMovementNumber)->afterLast('-')->toString()) + 1 : 1;
+        $nextSequence = $lastMovementNumber ? ((int) str($lastMovementNumber)->afterLast('-')->toString()) + 1 : 1;
 
         return $prefix.str_pad((string) $nextSequence, 4, '0', STR_PAD_LEFT);
     }
