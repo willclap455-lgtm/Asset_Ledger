@@ -58,4 +58,39 @@ class InventoryMovementServiceTest extends TestCase
         $this->assertSame(InventoryItem::STATUS_IN_REPAIR, $item->fresh()->status);
         $this->assertSame('555-0100', $movement->lines()->first()->item_snapshot['phone']['phone_number']);
     }
+
+    public function test_it_generates_the_next_number_from_the_highest_daily_sequence(): void
+    {
+        $user = User::factory()->create();
+        $prefix = 'MOV-'.now()->format('Ymd').'-';
+
+        InventoryMovement::create([
+            'movement_number' => $prefix.'9999',
+            'movement_type' => InventoryMovement::TYPE_RECEIVING,
+            'occurred_at' => now(),
+            'user_id' => $user->id,
+        ]);
+        InventoryMovement::create([
+            'movement_number' => $prefix.'10000',
+            'movement_type' => InventoryMovement::TYPE_RECEIVING,
+            'occurred_at' => now(),
+            'user_id' => $user->id,
+        ]);
+
+        $warehouse = Location::create(['name' => 'Warehouse', 'code' => 'WH', 'type' => 'internal']);
+        $item = InventoryItem::create([
+            'asset_tag' => 'PHONE-002',
+            'item_type' => InventoryItem::TYPE_PHONE,
+            'status' => InventoryItem::STATUS_RECEIVED,
+            'location_id' => $warehouse->id,
+        ]);
+
+        $movement = app(InventoryMovementService::class)->recordMovement([
+            'movement_type' => InventoryMovement::TYPE_RECEIVING,
+            'to_location_id' => $warehouse->id,
+            'item_ids' => [$item->id],
+        ], $user);
+
+        $this->assertSame($prefix.'10001', $movement->movement_number);
+    }
 }
