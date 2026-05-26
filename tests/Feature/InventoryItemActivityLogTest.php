@@ -51,4 +51,30 @@ class InventoryItemActivityLogTest extends TestCase
             'event' => 'created',
         ]);
     }
+
+    public function test_location_deletion_logs_integer_user_causer_for_uuid_subject(): void
+    {
+        $user = User::factory()->create();
+        Role::findOrCreate('Administrator');
+        $user->assignRole('Administrator');
+
+        $location = Location::create([
+            'type' => 'internal',
+            'name' => 'Delete Test Warehouse',
+            'code' => 'DELETE-WH',
+            'is_active' => true,
+        ]);
+
+        $response = $this->actingAs($user)->delete(route('locations.destroy', $location));
+
+        $response->assertRedirect(route('locations.index'));
+        $this->assertDatabaseMissing('locations', ['id' => $location->id]);
+        $this->assertDatabaseHas('activity_log', [
+            'causer_id' => $user->id,
+            'causer_type' => User::class,
+            'subject_id' => $location->id,
+            'subject_type' => Location::class,
+            'event' => 'deleted',
+        ]);
+    }
 }
