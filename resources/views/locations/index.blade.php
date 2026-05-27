@@ -1,5 +1,11 @@
 @extends('layouts.app')
 @section('content')
 <div class="d-flex justify-content-between align-items-center mb-3"><div><div class="page-title">Locations</div><div class="text-muted">Internal stock areas and external client sites.</div></div><a class="btn btn-primary btn-sm" href="{{ route('locations.create') }}">Add Location</a></div>
+<form class="card card-body py-2 mb-3" method="POST" action="{{ route('locations.import') }}" enctype="multipart/form-data">@csrf
+    <div class="row g-2 align-items-end">
+        <div class="col-md-8"><label class="form-label mb-1">Bulk import locations (.csv)</label><input required type="file" name="csv_file" class="form-control form-control-sm" accept=".csv,text/csv"><div class="form-text">Headers: name, code, type, client_code, address_line_1, city, state, postal_code, contact_name, contact_email, contact_phone, is_active, notes.</div>@error('csv_file')<div class="text-danger small">{{ $message }}</div>@enderror</div>
+        <div class="col-md-4"><button class="btn btn-outline-primary btn-sm w-100">Import Locations</button></div>
+    </div>
+</form>
 <div class="card"><div class="table-responsive"><table class="table table-sm table-hover mb-0"><thead><tr><th>Name</th><th>Type</th><th>Client</th><th>Code</th><th>Address</th><th>Assets</th><th>Active</th><th></th></tr></thead><tbody>@foreach($locations as $location)<tr><td>{{ $location->name }}</td><td>{{ $location->type }}</td><td>{{ $location->client?->name ?? 'Internal' }}</td><td class="text-mono">{{ $location->code }}</td><td>{{ $location->city }} {{ $location->state }}</td><td>{{ $location->inventory_items_count }}</td><td>{{ $location->is_active ? 'Yes' : 'No' }}</td><td><div class="btn-group"><a class="btn btn-outline-secondary btn-sm" href="{{ route('locations.edit', $location) }}">Edit</a>@can('delete', $location)<form method="POST" action="{{ route('locations.destroy', $location) }}" onsubmit="return confirm('Delete this location? Assigned inventory will become unassigned.')">@csrf @method('DELETE')<button class="btn btn-outline-danger btn-sm">Delete</button></form>@endcan</div></td></tr>@endforeach</tbody></table></div><div class="card-footer py-2">{{ $locations->links() }}</div></div>
 @endsection

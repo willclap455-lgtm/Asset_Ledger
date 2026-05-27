@@ -4,8 +4,10 @@ namespace App\Http\Controllers;
 
 use App\Http\Requests\ClientRequest;
 use App\Models\Client;
+use App\Services\ClientLocationImportService;
 use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Http\RedirectResponse;
+use Illuminate\Http\Request;
 use Illuminate\View\View;
 
 class ClientController extends Controller
@@ -35,10 +37,25 @@ class ClientController extends Controller
         return redirect()->route('clients.show', $client)->with('status', 'Client created.');
     }
 
+    public function import(Request $request, ClientLocationImportService $imports): RedirectResponse
+    {
+        $this->authorize('create', Client::class);
+
+        $validated = $request->validate([
+            'csv_file' => ['required', 'file', 'mimes:csv,txt', 'max:10240'],
+        ]);
+
+        $totals = $imports->importClients($validated['csv_file']);
+
+        return redirect()
+            ->route('clients.index')
+            ->with('status', "Client import complete: {$totals['created']} created, {$totals['updated']} updated.");
+    }
+
     public function show(Client $client): View
     {
         $this->authorize('view', $client);
-        $client->load(['locations', 'inventoryItems.location']);
+        $client->load(['locations', 'inventoryItems.location', 'inventoryItems.phone.assignedSimCard', 'inventoryItems.modem.assignedSimCard', 'inventoryItems.simCard']);
 
         return view('clients.show', ['client' => $client]);
     }

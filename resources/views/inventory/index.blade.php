@@ -25,8 +25,9 @@
         <td class="small text-mono">
             @if($item->serial_number) SN {{ $item->serial_number }}<br>@endif
             @if($item->phone?->imei) IMEI {{ $item->phone->imei }}<br>@endif
-            @if($item->phone?->phone_number) Phone {{ $item->phone->phone_number }}<br>@endif
-            @if($item->simCard?->iccid) ICCID {{ $item->simCard->iccid }}@endif
+            @if($item->phone?->assignedSimCard?->associated_phone_number) SIM Phone {{ $item->phone->assignedSimCard->associated_phone_number }}<br>@endif
+            @if($item->modem?->assignedSimCard?->associated_phone_number) SIM Phone {{ $item->modem->assignedSimCard->associated_phone_number }}<br>@endif
+            @if($item->simCard?->iccid) ICCID {{ $item->simCard->iccid }}@if($item->simCard->activation_status)<br>Activation {{ $item->simCard->activation_status }}@endif @endif
         </td>
         <td>{{ $item->updated_at->format('m/d/Y') }}</td>
     </tr>@empty<tr><td colspan="7" class="text-muted">No inventory found.</td></tr>@endforelse</tbody>

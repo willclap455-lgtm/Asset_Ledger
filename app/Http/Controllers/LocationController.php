@@ -5,8 +5,10 @@ namespace App\Http\Controllers;
 use App\Http\Requests\LocationRequest;
 use App\Models\Client;
 use App\Models\Location;
+use App\Services\ClientLocationImportService;
 use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Http\RedirectResponse;
+use Illuminate\Http\Request;
 use Illuminate\View\View;
 
 class LocationController extends Controller
@@ -34,6 +36,21 @@ class LocationController extends Controller
         $location = Location::create($request->validated() + ['is_active' => $request->boolean('is_active', true)]);
 
         return redirect()->route('locations.index')->with('status', 'Location created.');
+    }
+
+    public function import(Request $request, ClientLocationImportService $imports): RedirectResponse
+    {
+        $this->authorize('create', Location::class);
+
+        $validated = $request->validate([
+            'csv_file' => ['required', 'file', 'mimes:csv,txt', 'max:10240'],
+        ]);
+
+        $totals = $imports->importLocations($validated['csv_file']);
+
+        return redirect()
+            ->route('locations.index')
+            ->with('status', "Location import complete: {$totals['created']} created, {$totals['updated']} updated.");
     }
 
     public function edit(Location $location): View

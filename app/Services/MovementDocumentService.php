@@ -34,7 +34,7 @@ class MovementDocumentService
             $table->addCell($widths[$index], ['valign' => 'center'])->addText($header, 'header');
         }
 
-        foreach ($movement->lines as $line) {
+        foreach ($movement->lines->reject(fn ($line): bool => ($line->item_snapshot['item_type'] ?? null) === 'sim_card') as $line) {
             $snapshot = $line->item_snapshot;
             $table->addRow();
             $table->addCell($widths[0], ['valign' => 'top'])->addText($snapshot['asset_tag'] ?? '');
@@ -86,9 +86,9 @@ class MovementDocumentService
     private function phoneColumn(array $snapshot): string
     {
         $phone = $snapshot['phone'] ?? null;
-        $sim = $snapshot['sim_card'] ?? ($phone['assigned_sim'] ?? null);
+        $sim = $phone['assigned_sim'] ?? ($snapshot['sim_card'] ?? null);
 
-        return $phone['phone_number'] ?? ($sim['associated_phone_number'] ?? ($sim['phone_number'] ?? ''));
+        return $sim['associated_phone_number'] ?? ($sim['phone_number'] ?? '');
     }
 
     private function descriptionColumn(array $snapshot, InventoryMovement $movement): string

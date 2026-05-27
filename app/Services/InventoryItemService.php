@@ -80,7 +80,7 @@ class InventoryItemService
     {
         $existingPhone = $item->phone()->first();
         $previousSimCardId = $existingPhone?->assigned_sim_card_id;
-        $attributes = Arr::only($data, ['phone_number', 'carrier', 'imei', 'android_version', 'assigned_sim_card_id', 'assigned_printer_id']);
+        $attributes = Arr::only($data, ['carrier', 'imei', 'android_version', 'assigned_sim_card_id', 'assigned_printer_id']);
         $newSimCardId = $attributes['assigned_sim_card_id'] ?? null;
 
         $this->ensureSimCardIsAvailable($newSimCardId, $item);

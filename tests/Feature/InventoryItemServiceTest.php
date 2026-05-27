@@ -149,6 +149,7 @@ class InventoryItemServiceTest extends TestCase
             'iccid' => '89014103211118510803',
             'carrier' => 'AT&T',
             'associated_phone_number' => '555-0400',
+            'activation_status' => 'active',
         ]);
         $phoneItem = InventoryItem::create([
             'asset_tag' => 'PHONE-SHOW',
@@ -165,8 +166,26 @@ class InventoryItemServiceTest extends TestCase
             ->assertOk()
             ->assertSee('SIM Phone #')
             ->assertSee('555-0400')
+            ->assertSee('SIM Activation')
+            ->assertSee('active')
             ->assertSee('AT&amp;T', false)
             ->assertSee('666666666666666');
+    }
+
+    public function test_phone_assets_do_not_store_phone_number_details(): void
+    {
+        $service = app(InventoryItemService::class);
+
+        $item = $service->create([
+            'asset_tag' => 'PHONE-NO-NUMBER',
+            'item_type' => InventoryItem::TYPE_PHONE,
+            'status' => InventoryItem::STATUS_IN_STOCK,
+            'phone_number' => '555-0999',
+            'imei' => '777777777777777',
+        ]);
+
+        $this->assertNull($item->phone->phone_number);
+        $this->assertSame('777777777777777', $item->phone->imei);
     }
 
     private function adminUser(): User
