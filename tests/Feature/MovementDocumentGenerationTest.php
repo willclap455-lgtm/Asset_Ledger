@@ -26,23 +26,36 @@ class MovementDocumentGenerationTest extends TestCase
         $user->assignRole('Administrator');
 
         $home = Location::create(['name' => 'Home Office', 'code' => 'HOME', 'type' => 'internal']);
-        $item = InventoryItem::create([
+        $simItem = InventoryItem::create([
             'asset_tag' => 'SIM-001',
             'item_type' => InventoryItem::TYPE_SIM_CARD,
             'status' => InventoryItem::STATUS_RECEIVED,
             'location_id' => $home->id,
         ]);
-        $item->simCard()->create([
+        $sim = $simItem->simCard()->create([
             'iccid' => '89014103211118510720',
             'carrier' => 'AT&T',
             'associated_phone_number' => '555-0199',
             'activation_status' => 'active',
         ]);
+        $phoneItem = InventoryItem::create([
+            'asset_tag' => 'PHONE-001',
+            'item_type' => InventoryItem::TYPE_PHONE,
+            'status' => InventoryItem::STATUS_RECEIVED,
+            'location_id' => $home->id,
+            'manufacturer' => 'Samsung',
+            'model' => 'Galaxy A15',
+        ]);
+        $phoneItem->phone()->create([
+            'imei' => '123456789012345',
+            'assigned_sim_card_id' => $sim->id,
+        ]);
+        $sim->update(['assigned_inventory_item_id' => $phoneItem->id]);
 
         $movement = app(InventoryMovementService::class)->recordMovement([
             'movement_type' => InventoryMovement::TYPE_RECEIVING,
             'to_location_id' => $home->id,
-            'item_ids' => [$item->id],
+            'item_ids' => [$phoneItem->id, $simItem->id],
         ], $user);
 
         $document = app(MovementDocumentService::class)->generate($movement, $user);
@@ -63,8 +76,9 @@ class MovementDocumentGenerationTest extends TestCase
         $this->assertStringContainsString('UNIT ID', $xml);
         $this->assertStringContainsString('PHONE', $xml);
         $this->assertStringContainsString('DESCRIPTION', $xml);
-        $this->assertStringContainsString('SIM-001', $xml);
+        $this->assertStringContainsString('PHONE-001', $xml);
         $this->assertStringContainsString('555-0199', $xml);
+        $this->assertStringNotContainsString('SIM-001', $xml);
         $this->assertStringContainsString('HOME', $xml);
     }
 }

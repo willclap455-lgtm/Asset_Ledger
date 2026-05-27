@@ -32,7 +32,9 @@ class InventoryMovementService
                         'metadata' => $data['metadata'] ?? null,
                     ]);
 
-                    foreach (array_values($data['item_ids']) as $index => $itemId) {
+                    $sequence = 1;
+
+                    foreach (array_values($data['item_ids']) as $itemId) {
                         $item = InventoryItem::query()
                             ->with(['client', 'location', 'phone.assignedSimCard.inventoryItem', 'phone.assignedPrinter.inventoryItem', 'printer', 'modem.assignedSimCard.inventoryItem', 'simCard'])
                             ->lockForUpdate()
@@ -45,18 +47,20 @@ class InventoryMovementService
                         $newClientId = $this->targetClient($data, $item);
                         $newStatus = $data['new_status'] ?? $this->statusForMovement($data['movement_type'], $item->status);
 
-                        InventoryMovementLine::create([
-                            'inventory_movement_id' => $movement->id,
-                            'inventory_item_id' => $item->id,
-                            'previous_location_id' => $previousLocationId,
-                            'new_location_id' => $newLocationId,
-                            'previous_client_id' => $previousClientId,
-                            'new_client_id' => $newClientId,
-                            'previous_status' => $previousStatus,
-                            'new_status' => $newStatus,
-                            'item_snapshot' => $this->snapshot($item),
-                            'sequence' => $index + 1,
-                        ]);
+                        if ($item->item_type !== InventoryItem::TYPE_SIM_CARD) {
+                            InventoryMovementLine::create([
+                                'inventory_movement_id' => $movement->id,
+                                'inventory_item_id' => $item->id,
+                                'previous_location_id' => $previousLocationId,
+                                'new_location_id' => $newLocationId,
+                                'previous_client_id' => $previousClientId,
+                                'new_client_id' => $newClientId,
+                                'previous_status' => $previousStatus,
+                                'new_status' => $newStatus,
+                                'item_snapshot' => $this->snapshot($item),
+                                'sequence' => $sequence++,
+                            ]);
+                        }
 
                         $updates = [
                             'location_id' => $newLocationId,
@@ -155,14 +159,14 @@ class InventoryMovementService
             'client' => $item->client?->only(['id', 'name', 'code']),
             'location' => $item->location?->only(['id', 'name', 'type', 'code']),
             'phone' => $item->phone ? [
-                'phone_number' => $item->phone->phone_number,
                 'carrier' => $item->phone->carrier,
                 'imei' => $item->phone->imei,
                 'android_version' => $item->phone->android_version,
                 'assigned_sim' => $item->phone->assignedSimCard ? [
                     'iccid' => $item->phone->assignedSimCard->iccid,
-                    'phone_number' => $item->phone->assignedSimCard->associated_phone_number,
+                    'associated_phone_number' => $item->phone->assignedSimCard->associated_phone_number,
                     'carrier' => $item->phone->assignedSimCard->carrier,
+                    'activation_status' => $item->phone->assignedSimCard->activation_status,
                 ] : null,
                 'assigned_printer' => $item->phone->assignedPrinter?->inventoryItem?->only(['asset_tag', 'serial_number', 'manufacturer', 'model']),
             ] : null,
@@ -176,8 +180,9 @@ class InventoryMovementService
                 'carrier' => $item->modem->carrier,
                 'assigned_sim' => $item->modem->assignedSimCard ? [
                     'iccid' => $item->modem->assignedSimCard->iccid,
-                    'phone_number' => $item->modem->assignedSimCard->associated_phone_number,
+                    'associated_phone_number' => $item->modem->assignedSimCard->associated_phone_number,
                     'carrier' => $item->modem->assignedSimCard->carrier,
+                    'activation_status' => $item->modem->assignedSimCard->activation_status,
                 ] : null,
             ] : null,
             'sim_card' => $item->simCard ? [

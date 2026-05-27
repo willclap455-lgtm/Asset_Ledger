@@ -19,6 +19,8 @@ Route::middleware(['auth', 'verified'])->group(function (): void {
 
     Route::resource('clients', ClientController::class);
     Route::resource('locations', LocationController::class)->except(['show']);
+    Route::post('clients/import', [ClientController::class, 'import'])->name('clients.import');
+    Route::post('locations/import', [LocationController::class, 'import'])->name('locations.import');
     Route::resource('inventory-items', InventoryItemController::class);
     Route::resource('movements', InventoryMovementController::class)->only(['index', 'create', 'store', 'show']);
 
