@@ -24,11 +24,11 @@ class InventoryMovementPolicy
 
     public function update(User $user, InventoryMovement $movement): bool
     {
-        return false;
+        return $user->hasAnyRole(['Administrator', 'Inventory Staff', 'Repair Technician']);
     }
 
     public function delete(User $user, InventoryMovement $movement): bool
     {
-        return false;
+        return $this->update($user, $movement);
     }
 }

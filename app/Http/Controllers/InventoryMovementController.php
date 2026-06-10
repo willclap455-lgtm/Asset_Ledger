@@ -41,13 +41,10 @@ class InventoryMovementController extends Controller
     {
         $this->authorize('create', InventoryMovement::class);
 
-        return view('movements.form', [
-            'types' => InventoryMovement::typeOptions(),
-            'clients' => Client::orderBy('name')->get(),
-            'locations' => Location::with('client')->orderBy('type')->orderBy('name')->get(),
-            'items' => InventoryItem::with(['client', 'location'])->orderBy('asset_tag')->limit(500)->get(),
-            'selectedItemIds' => collect((array) $request->input('item_ids'))->filter()->all(),
-        ]);
+        return view('movements.form', $this->formData(
+            new InventoryMovement(['occurred_at' => now()]),
+            collect((array) $request->input('item_ids'))->filter()->all()
+        ));
     }
 
     public function store(InventoryMovementRequest $request, InventoryMovementService $movements): RedirectResponse
@@ -63,5 +60,42 @@ class InventoryMovementController extends Controller
         $movement->load(['user', 'client', 'fromLocation', 'toLocation', 'lines.inventoryItem', 'lines.previousLocation', 'lines.newLocation', 'documents.user']);
 
         return view('movements.show', ['movement' => $movement]);
+    }
+
+    public function edit(InventoryMovement $movement, InventoryMovementService $movements): View
+    {
+        $this->authorize('update', $movement);
+        $movement->load('lines');
+
+        return view('movements.form', $this->formData($movement, $movements->movementItemIds($movement)));
+    }
+
+    public function update(InventoryMovementRequest $request, InventoryMovement $movement, InventoryMovementService $movements): RedirectResponse
+    {
+        $movement = $movements->updateMovement($movement, $request->validated());
+
+        return redirect()->route('movements.show', $movement)->with('status', 'Inventory movement updated.');
+    }
+
+    public function destroy(InventoryMovement $movement, InventoryMovementService $movements): RedirectResponse
+    {
+        $this->authorize('delete', $movement);
+
+        $movementNumber = $movement->movement_number;
+        $movements->deleteMovement($movement);
+
+        return redirect()->route('movements.index')->with('status', "Inventory movement {$movementNumber} deleted.");
+    }
+
+    private function formData(InventoryMovement $movement, array $selectedItemIds = []): array
+    {
+        return [
+            'movement' => $movement,
+            'types' => InventoryMovement::typeOptions(),
+            'clients' => Client::orderBy('name')->get(),
+            'locations' => Location::with('client')->orderBy('type')->orderBy('name')->get(),
+            'items' => InventoryItem::with(['client', 'location'])->orderBy('asset_tag')->limit(500)->get(),
+            'selectedItemIds' => $selectedItemIds,
+        ];
     }
 }

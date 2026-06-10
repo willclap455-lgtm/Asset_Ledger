@@ -8,6 +8,7 @@ use App\Models\Location;
 use App\Models\User;
 use App\Services\InventoryMovementService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Validation\ValidationException;
 use Spatie\Permission\Models\Role;
 use Tests\TestCase;
 
@@ -137,5 +138,125 @@ class InventoryMovementServiceTest extends TestCase
 
         $this->assertStringEndsWith('-0001', $firstMovement->movement_number);
         $this->assertStringEndsWith('-0002', $secondMovement->movement_number);
+    }
+
+    public function test_it_updates_a_movement_and_reapplies_asset_state(): void
+    {
+        $user = User::factory()->create();
+        Role::findOrCreate('Administrator');
+        $user->assignRole('Administrator');
+        $warehouse = Location::create(['name' => 'Warehouse', 'code' => 'WH', 'type' => 'internal']);
+        $repair = Location::create(['name' => 'Repair Bench', 'code' => 'REPAIR', 'type' => 'internal']);
+        $destination = Location::create(['name' => 'Shelf B', 'code' => 'SHELF-B', 'type' => 'internal']);
+        $item = InventoryItem::create([
+            'asset_tag' => 'MOVE-EDIT-001',
+            'item_type' => InventoryItem::TYPE_GENERIC,
+            'status' => InventoryItem::STATUS_IN_STOCK,
+            'location_id' => $warehouse->id,
+        ]);
+        $service = app(InventoryMovementService::class);
+        $movement = $service->recordMovement([
+            'movement_type' => InventoryMovement::TYPE_REPAIR_INTAKE,
+            'occurred_at' => now()->format('Y-m-d\TH:i'),
+            'to_location_id' => $repair->id,
+            'item_ids' => [$item->id],
+            'notes' => 'Wrong movement.',
+        ], $user);
+
+        $updated = $service->updateMovement($movement, [
+            'movement_type' => InventoryMovement::TYPE_TRANSFER,
+            'occurred_at' => now()->format('Y-m-d\TH:i'),
+            'to_location_id' => $destination->id,
+            'item_ids' => [$item->id],
+            'notes' => 'Corrected movement.',
+        ]);
+
+        $this->assertSame(InventoryMovement::TYPE_TRANSFER, $updated->movement_type);
+        $this->assertSame('Corrected movement.', $updated->notes);
+        $this->assertSame($destination->id, $item->fresh()->location_id);
+        $this->assertSame(InventoryItem::STATUS_IN_STOCK, $item->fresh()->status);
+        $this->assertDatabaseHas('inventory_movement_lines', [
+            'inventory_movement_id' => $movement->id,
+            'inventory_item_id' => $item->id,
+            'previous_location_id' => $warehouse->id,
+            'new_location_id' => $destination->id,
+            'previous_status' => InventoryItem::STATUS_IN_STOCK,
+            'new_status' => InventoryItem::STATUS_IN_STOCK,
+        ]);
+    }
+
+    public function test_it_deletes_a_movement_and_rolls_back_all_selected_assets(): void
+    {
+        $user = User::factory()->create();
+        Role::findOrCreate('Administrator');
+        $user->assignRole('Administrator');
+        $warehouse = Location::create(['name' => 'Warehouse', 'code' => 'WH', 'type' => 'internal']);
+        $destination = Location::create(['name' => 'Lot A', 'code' => 'LOT-A', 'type' => 'client']);
+        $item = InventoryItem::create([
+            'asset_tag' => 'MOVE-DELETE-001',
+            'item_type' => InventoryItem::TYPE_GENERIC,
+            'status' => InventoryItem::STATUS_RECEIVED,
+            'location_id' => $warehouse->id,
+        ]);
+        $simItem = InventoryItem::create([
+            'asset_tag' => 'MOVE-DELETE-SIM',
+            'item_type' => InventoryItem::TYPE_SIM_CARD,
+            'status' => InventoryItem::STATUS_RECEIVED,
+            'location_id' => $warehouse->id,
+        ]);
+        $simItem->simCard()->create(['iccid' => '89014103211118510999']);
+        $service = app(InventoryMovementService::class);
+        $movement = $service->recordMovement([
+            'movement_type' => InventoryMovement::TYPE_DEPLOYMENT,
+            'occurred_at' => now()->format('Y-m-d\TH:i'),
+            'to_location_id' => $destination->id,
+            'item_ids' => [$item->id, $simItem->id],
+        ], $user);
+
+        $service->deleteMovement($movement);
+
+        $this->assertDatabaseMissing('inventory_movements', ['id' => $movement->id]);
+        $this->assertSame($warehouse->id, $item->fresh()->location_id);
+        $this->assertSame(InventoryItem::STATUS_RECEIVED, $item->fresh()->status);
+        $this->assertSame($warehouse->id, $simItem->fresh()->location_id);
+        $this->assertSame(InventoryItem::STATUS_RECEIVED, $simItem->fresh()->status);
+    }
+
+    public function test_it_blocks_changes_when_an_asset_has_newer_movement_history(): void
+    {
+        $user = User::factory()->create();
+        Role::findOrCreate('Administrator');
+        $user->assignRole('Administrator');
+        $warehouse = Location::create(['name' => 'Warehouse', 'code' => 'WH', 'type' => 'internal']);
+        $firstDestination = Location::create(['name' => 'Lot A', 'code' => 'LOT-A', 'type' => 'client']);
+        $secondDestination = Location::create(['name' => 'Lot B', 'code' => 'LOT-B', 'type' => 'client']);
+        $item = InventoryItem::create([
+            'asset_tag' => 'MOVE-GUARD-001',
+            'item_type' => InventoryItem::TYPE_GENERIC,
+            'status' => InventoryItem::STATUS_RECEIVED,
+            'location_id' => $warehouse->id,
+        ]);
+        $service = app(InventoryMovementService::class);
+        $firstMovement = $service->recordMovement([
+            'movement_type' => InventoryMovement::TYPE_DEPLOYMENT,
+            'occurred_at' => now()->subHour()->format('Y-m-d\TH:i'),
+            'to_location_id' => $firstDestination->id,
+            'item_ids' => [$item->id],
+        ], $user);
+        $service->recordMovement([
+            'movement_type' => InventoryMovement::TYPE_TRANSFER,
+            'occurred_at' => now()->format('Y-m-d\TH:i'),
+            'to_location_id' => $secondDestination->id,
+            'item_ids' => [$item->id],
+        ], $user);
+
+        $this->expectException(ValidationException::class);
+
+        $service->updateMovement($firstMovement, [
+            'movement_type' => InventoryMovement::TYPE_RETURN,
+            'occurred_at' => now()->subHour()->format('Y-m-d\TH:i'),
+            'to_location_id' => $warehouse->id,
+            'item_ids' => [$item->id],
+        ]);
     }
 }
