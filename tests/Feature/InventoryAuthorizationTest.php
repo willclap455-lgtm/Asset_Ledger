@@ -97,6 +97,7 @@ class InventoryAuthorizationTest extends TestCase
             'movements.index' => route('movements.index'),
             'movements.create' => route('movements.create'),
             'movements.show' => route('movements.show', $movement),
+            'movements.edit' => route('movements.edit', $movement),
             'reports.index' => route('reports.index'),
             'reports.inventory-export' => route('reports.inventory-export'),
         ];

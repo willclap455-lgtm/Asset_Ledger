@@ -188,6 +188,25 @@ class InventoryItemServiceTest extends TestCase
         $this->assertSame('777777777777777', $item->phone->imei);
     }
 
+    public function test_phone_asset_can_be_created_without_imei_or_serial_number(): void
+    {
+        $user = $this->adminUser();
+
+        $this->actingAs($user)->post(route('inventory-items.store'), [
+            'asset_tag' => 'PHONE-NO-IMEI',
+            'item_type' => InventoryItem::TYPE_PHONE,
+            'status' => InventoryItem::STATUS_IN_STOCK,
+            'manufacturer' => 'Samsung',
+            'model' => 'Galaxy A15',
+        ])->assertRedirect();
+
+        $item = InventoryItem::where('asset_tag', 'PHONE-NO-IMEI')->firstOrFail();
+        $this->assertDatabaseHas('phones', [
+            'inventory_item_id' => $item->id,
+            'imei' => null,
+        ]);
+    }
+
     private function adminUser(): User
     {
         $user = User::factory()->create();

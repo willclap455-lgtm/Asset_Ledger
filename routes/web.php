@@ -22,7 +22,7 @@ Route::middleware(['auth', 'verified'])->group(function (): void {
     Route::post('clients/import', [ClientController::class, 'import'])->name('clients.import');
     Route::post('locations/import', [LocationController::class, 'import'])->name('locations.import');
     Route::resource('inventory-items', InventoryItemController::class);
-    Route::resource('movements', InventoryMovementController::class)->only(['index', 'create', 'store', 'show']);
+    Route::resource('movements', InventoryMovementController::class);
 
     Route::post('inventory-items/{inventory_item}/notes', [InventoryNoteController::class, 'store'])->name('inventory-items.notes.store');
     Route::post('inventory-items/{inventory_item}/repairs', [RepairController::class, 'store'])->name('inventory-items.repairs.store');

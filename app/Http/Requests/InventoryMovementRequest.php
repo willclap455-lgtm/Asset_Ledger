@@ -10,7 +10,9 @@ class InventoryMovementRequest extends FormRequest
 {
     public function authorize(): bool
     {
-        return $this->user()?->can('create', InventoryMovement::class) ?? false;
+        $movement = $this->route('movement');
+
+        return $this->user()?->can($movement ? 'update' : 'create', $movement ?? InventoryMovement::class) ?? false;
     }
 
     public function rules(): array
@@ -24,7 +26,7 @@ class InventoryMovementRequest extends FormRequest
             'new_status' => ['nullable', 'string', 'max:80'],
             'notes' => ['nullable', 'string'],
             'item_ids' => ['required', 'array', 'min:1'],
-            'item_ids.*' => ['required', 'exists:inventory_items,id'],
+            'item_ids.*' => ['required', 'distinct', 'exists:inventory_items,id'],
         ];
     }
 }

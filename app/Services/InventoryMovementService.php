@@ -10,6 +10,7 @@ use App\Models\User;
 use Illuminate\Database\QueryException;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\ValidationException;
 
 class InventoryMovementService
 {
@@ -29,55 +30,10 @@ class InventoryMovementService
                         'to_location_id' => $data['to_location_id'] ?? null,
                         'client_id' => $data['client_id'] ?? null,
                         'notes' => $data['notes'] ?? null,
-                        'metadata' => $data['metadata'] ?? null,
+                        'metadata' => $this->baseMetadata($data),
                     ]);
 
-                    $sequence = 1;
-
-                    foreach (array_values($data['item_ids']) as $itemId) {
-                        $item = InventoryItem::query()
-                            ->with(['client', 'location', 'phone.assignedSimCard.inventoryItem', 'phone.assignedPrinter.inventoryItem', 'printer', 'modem.assignedSimCard.inventoryItem', 'simCard'])
-                            ->lockForUpdate()
-                            ->findOrFail($itemId);
-
-                        $previousLocationId = $item->location_id;
-                        $previousClientId = $item->client_id;
-                        $previousStatus = $item->status;
-                        $newLocationId = $this->targetLocation($data, $item);
-                        $newClientId = $this->targetClient($data, $item);
-                        $newStatus = $data['new_status'] ?? $this->statusForMovement($data['movement_type'], $item->status);
-
-                        if ($item->item_type !== InventoryItem::TYPE_SIM_CARD) {
-                            InventoryMovementLine::create([
-                                'inventory_movement_id' => $movement->id,
-                                'inventory_item_id' => $item->id,
-                                'previous_location_id' => $previousLocationId,
-                                'new_location_id' => $newLocationId,
-                                'previous_client_id' => $previousClientId,
-                                'new_client_id' => $newClientId,
-                                'previous_status' => $previousStatus,
-                                'new_status' => $newStatus,
-                                'item_snapshot' => $this->snapshot($item),
-                                'sequence' => $sequence++,
-                            ]);
-                        }
-
-                        $updates = [
-                            'location_id' => $newLocationId,
-                            'client_id' => $newClientId,
-                            'status' => $newStatus,
-                        ];
-
-                        if ($data['movement_type'] === InventoryMovement::TYPE_DEPLOYMENT && ! $item->deployed_at) {
-                            $updates['deployed_at'] = Carbon::parse($data['occurred_at'] ?? now())->toDateString();
-                        }
-
-                        if ($data['movement_type'] === InventoryMovement::TYPE_RETIREMENT) {
-                            $updates['retired_at'] = Carbon::parse($data['occurred_at'] ?? now())->toDateString();
-                        }
-
-                        $item->update($updates);
-                    }
+                    $this->applyMovement($movement, $data);
 
                     $movement->load(['user', 'client', 'fromLocation', 'toLocation', 'lines.inventoryItem.phone.assignedSimCard.inventoryItem', 'lines.inventoryItem.phone.assignedPrinter.inventoryItem', 'lines.inventoryItem.printer', 'lines.inventoryItem.modem.assignedSimCard.inventoryItem', 'lines.inventoryItem.simCard']);
                     event(new InventoryMovementRecorded($movement));
@@ -92,6 +48,214 @@ class InventoryMovementService
         }
 
         throw new \RuntimeException('Unable to record inventory movement.');
+    }
+
+    public function updateMovement(InventoryMovement $movement, array $data): InventoryMovement
+    {
+        return DB::transaction(function () use ($movement, $data): InventoryMovement {
+            $movement = InventoryMovement::query()
+                ->with('lines')
+                ->lockForUpdate()
+                ->findOrFail($movement->id);
+
+            $this->ensureMovementCanChange($movement);
+            $this->revertMovement($movement);
+            $movement->lines()->delete();
+
+            $movement->update([
+                'movement_type' => $data['movement_type'],
+                'occurred_at' => Carbon::parse($data['occurred_at'] ?? now()),
+                'from_location_id' => $data['from_location_id'] ?? null,
+                'to_location_id' => $data['to_location_id'] ?? null,
+                'client_id' => $data['client_id'] ?? null,
+                'notes' => $data['notes'] ?? null,
+                'metadata' => $this->baseMetadata($data),
+            ]);
+
+            $this->applyMovement($movement, $data);
+
+            return $movement->refresh()->load(['user', 'client', 'fromLocation', 'toLocation', 'lines.inventoryItem', 'lines.previousLocation', 'lines.newLocation', 'documents.user']);
+        });
+    }
+
+    public function deleteMovement(InventoryMovement $movement): void
+    {
+        DB::transaction(function () use ($movement): void {
+            $movement = InventoryMovement::query()
+                ->with('lines')
+                ->lockForUpdate()
+                ->findOrFail($movement->id);
+
+            $this->ensureMovementCanChange($movement);
+            $this->revertMovement($movement);
+            $movement->delete();
+        });
+    }
+
+    /**
+     * @return array<int, string>
+     */
+    public function movementItemIds(InventoryMovement $movement): array
+    {
+        return collect($movement->metadata['selected_item_ids'] ?? [])
+            ->merge($movement->lines()->pluck('inventory_item_id'))
+            ->filter()
+            ->unique()
+            ->values()
+            ->all();
+    }
+
+    private function applyMovement(InventoryMovement $movement, array $data): void
+    {
+        $sequence = 1;
+        $previousStates = [];
+        $occurredAt = Carbon::parse($data['occurred_at'] ?? $movement->occurred_at ?? now());
+
+        foreach ($this->selectedItemIds($data) as $itemId) {
+            $item = InventoryItem::query()
+                ->with(['client', 'location', 'phone.assignedSimCard.inventoryItem', 'phone.assignedPrinter.inventoryItem', 'printer', 'modem.assignedSimCard.inventoryItem', 'simCard'])
+                ->lockForUpdate()
+                ->findOrFail($itemId);
+
+            $previousLocationId = $item->location_id;
+            $previousClientId = $item->client_id;
+            $previousStatus = $item->status;
+            $newLocationId = $this->targetLocation($data, $item);
+            $newClientId = $this->targetClient($data, $item);
+            $newStatus = $data['new_status'] ?? $this->statusForMovement($data['movement_type'], $item->status);
+            $previousStates[$item->id] = [
+                'location_id' => $previousLocationId,
+                'client_id' => $previousClientId,
+                'status' => $previousStatus,
+                'deployed_at' => optional($item->deployed_at)->toDateString(),
+                'retired_at' => optional($item->retired_at)->toDateString(),
+            ];
+
+            if ($item->item_type !== InventoryItem::TYPE_SIM_CARD) {
+                InventoryMovementLine::create([
+                    'inventory_movement_id' => $movement->id,
+                    'inventory_item_id' => $item->id,
+                    'previous_location_id' => $previousLocationId,
+                    'new_location_id' => $newLocationId,
+                    'previous_client_id' => $previousClientId,
+                    'new_client_id' => $newClientId,
+                    'previous_status' => $previousStatus,
+                    'new_status' => $newStatus,
+                    'item_snapshot' => $this->snapshot($item),
+                    'sequence' => $sequence++,
+                ]);
+            }
+
+            $updates = [
+                'location_id' => $newLocationId,
+                'client_id' => $newClientId,
+                'status' => $newStatus,
+            ];
+
+            if ($data['movement_type'] === InventoryMovement::TYPE_DEPLOYMENT && ! $item->deployed_at) {
+                $updates['deployed_at'] = $occurredAt->toDateString();
+            }
+
+            if ($data['movement_type'] === InventoryMovement::TYPE_RETIREMENT) {
+                $updates['retired_at'] = $occurredAt->toDateString();
+            }
+
+            $item->update($updates);
+        }
+
+        $movement->forceFill([
+            'metadata' => array_replace($movement->metadata ?? [], [
+                'selected_item_ids' => $this->selectedItemIds($data),
+                'previous_states' => $previousStates,
+            ]),
+        ])->save();
+    }
+
+    private function revertMovement(InventoryMovement $movement): void
+    {
+        $previousStates = $movement->metadata['previous_states'] ?? [];
+
+        if ($previousStates === []) {
+            $previousStates = $movement->lines
+                ->mapWithKeys(fn (InventoryMovementLine $line): array => [
+                    $line->inventory_item_id => [
+                        'location_id' => $line->previous_location_id,
+                        'client_id' => $line->previous_client_id,
+                        'status' => $line->previous_status,
+                    ],
+                ])
+                ->all();
+        }
+
+        foreach ($previousStates as $itemId => $state) {
+            $updates = [
+                'location_id' => $state['location_id'] ?? null,
+                'client_id' => $state['client_id'] ?? null,
+                'status' => $state['status'],
+            ];
+
+            if (array_key_exists('deployed_at', $state)) {
+                $updates['deployed_at'] = $state['deployed_at'];
+            }
+
+            if (array_key_exists('retired_at', $state)) {
+                $updates['retired_at'] = $state['retired_at'];
+            }
+
+            InventoryItem::query()
+                ->lockForUpdate()
+                ->findOrFail($itemId)
+                ->update($updates);
+        }
+    }
+
+    private function ensureMovementCanChange(InventoryMovement $movement): void
+    {
+        $itemIds = $this->movementItemIds($movement);
+
+        if ($itemIds === []) {
+            return;
+        }
+
+        $hasLaterMovement = InventoryMovementLine::query()
+            ->whereIn('inventory_item_id', $itemIds)
+            ->where('inventory_movement_id', '!=', $movement->id)
+            ->whereHas('movement', function ($query) use ($movement): void {
+                $query
+                    ->where('occurred_at', '>', $movement->occurred_at)
+                    ->orWhere(function ($query) use ($movement): void {
+                        $query
+                            ->where('occurred_at', $movement->occurred_at)
+                            ->where('created_at', '>', $movement->created_at);
+                    });
+            })
+            ->exists();
+
+        if ($hasLaterMovement) {
+            throw ValidationException::withMessages([
+                'movement' => 'This movement cannot be changed because one or more assets have newer movement history. Edit or remove the newer movement first.',
+            ]);
+        }
+    }
+
+    private function baseMetadata(array $data): array
+    {
+        return array_replace($data['metadata'] ?? [], [
+            'selected_item_ids' => $this->selectedItemIds($data),
+            'new_status' => $data['new_status'] ?? null,
+        ]);
+    }
+
+    /**
+     * @return array<int, string>
+     */
+    private function selectedItemIds(array $data): array
+    {
+        return collect($data['item_ids'] ?? [])
+            ->filter()
+            ->unique()
+            ->values()
+            ->all();
     }
 
     private function nextMovementNumber(): string

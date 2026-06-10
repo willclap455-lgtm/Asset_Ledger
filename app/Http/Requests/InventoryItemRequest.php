@@ -39,7 +39,7 @@ class InventoryItemRequest extends FormRequest
             'retired_at' => ['nullable', 'date'],
             'notes' => ['nullable', 'string'],
             'carrier' => ['nullable', 'string', 'max:120'],
-            'imei' => [Rule::requiredIf(fn () => in_array($this->input('item_type'), [InventoryItem::TYPE_PHONE, InventoryItem::TYPE_MODEM], true) && blank($this->input('serial_number'))), 'nullable', 'string', 'max:120', Rule::unique($this->input('item_type') === InventoryItem::TYPE_MODEM ? 'modems' : 'phones', 'imei')->ignore($this->input('item_type') === InventoryItem::TYPE_MODEM ? $modem?->id : $phone?->id)],
+            'imei' => ['nullable', 'string', 'max:120', Rule::unique($this->input('item_type') === InventoryItem::TYPE_MODEM ? 'modems' : 'phones', 'imei')->ignore($this->input('item_type') === InventoryItem::TYPE_MODEM ? $modem?->id : $phone?->id)],
             'android_version' => ['nullable', 'string', 'max:80'],
             'assigned_sim_card_id' => [
                 'nullable',
